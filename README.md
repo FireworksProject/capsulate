@@ -23,7 +23,7 @@ Load Capsulate into a Node.js module by requiring it.
     var CAP = require('capsulate');
 ```
 
-Create a prototype to use.
+Create prototypes to use.
 ```JavaScript
 var Person = CAP.extend({
 	firstName: {
@@ -31,11 +31,45 @@ var Person = CAP.extend({
 		type: String,
 		defaultValue: '',
 		tags: ['safe'],
-		validators: [required]
+		validators: [string, required]
+	},
+	lastName: {
+		name: 'last name',
+		type: String,
+		defaultValue: '',
+		tags: ['safe'],
+		validators: [string, required]
+	},
+	age: {
+		type: Number,
+		defaultValue: 0,
+		tags: ['safe'],
+	  validators: [number]
+	},
+	affilations: {
+		type: Array,
+		defaultValue: Array,
+		validators: [affiliations]
+	},
+  address: {
+		type: Address, // Another capsule object
+		defaultValue: function () { return Object.create(null); },
+    validators: [address]
 	}
 });
 
-var john = Buyer.create();
+var Buyer = Person.extend({
+	purchases: {
+		type: Array,
+		defaultValue: Array,
+		validators: [purchases]
+	}
+});
+```
+Then easily manage and validate your objects.
+
+```JavaScript
+var john = Buyer.create({tags: [safe]});
 
 var jane = Buyer.clean(formData);
 
