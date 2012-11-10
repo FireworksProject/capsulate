@@ -1,5 +1,9 @@
+INVPARAM = 'INVPARAM'
+INVPROPDEF = 'INVPROPDEF'
+
 _ = require 'underscore'
 
+# Extend Underscore.
 _.mixin({
     isFullString: (a) -> return a and typeof a is 'string'
 
@@ -12,9 +16,10 @@ _.mixin({
         return no
 })
 
-exports.proto = gProto = Object.create(null)
+# Model is the prototype for all Object models.
+exports.Model = Model = Object.create(null)
 
-gProto.create = ->
+Model.create = ->
     defs = @definitions
     rv = Object.keys(defs).reduce((rv, key) ->
         rv[key] = if _.hasProperty(defs[key], 'defaultValue')
@@ -26,7 +31,7 @@ gProto.create = ->
     , Object.create(null))
     return rv
 
-gProto.clean = (aObject) ->
+Model.clean = (aObject) ->
     defs = @definitions
     rv = Object.keys(defs).reduce((rv, key) ->
         rv[key] = aObject[key]
@@ -34,7 +39,7 @@ gProto.clean = (aObject) ->
     , Object.create(null))
     return rv
 
-gProto.coerce = (aObject) ->
+Model.coerce = (aObject) ->
     defs = @definitions
     rv = Object.keys(aObject).reduce((rv, key) ->
         value = aObject[key]
@@ -45,7 +50,7 @@ gProto.coerce = (aObject) ->
     , Object.create(null))
     return rv
 
-gProto.validate = (aObject) ->
+Model.validate = (aObject) ->
     errors = Object.create(null)
     defs = @definitions
 
@@ -67,22 +72,60 @@ gProto.validate = (aObject) ->
     if Object.keys(errors).length then return errors
     return null
 
-gProto.extend = (aDefinitions) ->
-    if not _.isObject(aDefinitions) or Array.isArray(aDefinitions)
-        msg = "Definitions passed to .extend(aDefinitions) must be an Object."
-        throw new Error(msg)
+# Public: Create a new Model Object by extending this object.
+#
+# aDefs - The dictionary Object of property definitions whose own enumerable
+# properties are the descriptors for the properties managed by this Model.
+#
+# See the docs for ::create(aDefs) for more usage information.
+#
+# Returns a new Model Object which has been 'frozen' to prevent accidental
+# tampering.
+Model.extend = (aDefs) ->
+    if not _.isObject(aDefs) or Array.isArray(aDefs)
+        msg = "Definitions passed to .extend(aDefs) must be an Object."
+        throwInvparam(new Error(msg))
 
-    return createModel(@, aDefinitions)
+    return createModel(@, aDefs)
 
 
-exports.create = (aDefinitions) ->
-    if not _.isObject(aDefinitions) or Array.isArray(aDefinitions)
-        msg = "Definitions passed to create(aDefinitions) must be an Object."
-        throw new Error(msg)
+# Public: Create a new Model Object.
+#
+# aDefs - The dictionary Object of property definitions whose own enumerable
+# properties are the descriptors for the properties managed by this Model. Each
+# property definition should take the following form:
+#
+# .name         - A friendly String name for the property mostly used in
+#                 validation error messages.
+# .defaultValue - The default value to use for this property when creating a
+#                 new instance of the modeled Object.
+# .validators   - An Array of validation functions that will each be called
+#                 during the validation process.
+# .coerce       - A type casting function that can modify the value of a
+#                 property on the modeled object.
+#
+# The signature for the validation functions is:
+#
+# `function validator(value, key, name) { ... }`
+#
+# The 'value' is the value of the property, the key is the property key, and
+# the name is the name given to the property in the property definition.
+#
+# The signature for the coerce function is:
+#
+# `function typecast(value) { return anotherValue; }`
+#
+# Returns a new Model Object which has been 'frozen' to prevent accidental
+# tampering.
+exports.create = (aDefs) ->
+    if not _.isObject(aDefs) or Array.isArray(aDefs)
+        msg = "Definitions passed to create(aDefs) must be an Object."
+        throwInvparam(new Error(msg))
 
-    return createModel(gProto, aDefinitions)
+    return createModel(Model, aDefs)
 
 
+# Private:
 createModel = do ->
 
     # Extend an object using Object.defineProperty().
@@ -104,7 +147,9 @@ createModel = do ->
         # Create and extend the definitions with the .definitions property of
         # the parent, the the child Object, which is the new definition
         # dictionary.
-        definitions = extendDefinitions(aParent.definitions, aChild)
+        parentDefs = if _.isObject(aParent.definitions) then aParent.definitions
+        else Object.create(null)
+        definitions = extendDefinitions(parentDefs, aChild)
         Object.defineProperty(model, 'definitions', {
             value: Object.freeze(definitions)
         })
@@ -115,13 +160,15 @@ createModel = do ->
     return create
 
 
+# Private:
 extendDefinitions = do ->
 
     define = (definitions, key, val) ->
         try
             def = normalizeDefinition(val)
         catch message
-            throw new Error("Definition error '#{key}': #{message}")
+            msg = "Definition error for property '#{key}': #{message}"
+            throwInvpropdef(Error(msg))
 
         Object.defineProperty(definitions, key, {
             enumerable: yes
@@ -130,21 +177,24 @@ extendDefinitions = do ->
         return definitions
 
     extend = (aParent, aChild) ->
-        defs = Object.create(null)
+        container = Object.create(null)
 
-        defs = Object.keys(aParent).reduce((defs, key) ->
-            return define(defs, key, aParent[key])
+        for own key, def of aParent
+            container[key] = def
+
+        for own key, def of aChild
+            container[key] = def
+
+        defs = Object.keys(container).reduce((defs, key) ->
+            return define(defs, key, container[key])
         , Object.create(null))
-
-        defs = Object.keys(aChild).reduce((defs, key) ->
-            return define(defs, key, aChild[key])
-        , defs)
 
         return defs
 
     return extend
 
 
+# Private:
 normalizeDefinition = (aDef) ->
     aDef or= {}
     def = Object.create(null)
@@ -173,7 +223,7 @@ normalizeDefinition = (aDef) ->
 
     for fn in validators
         if not _.isFunction(fn)
-            throw "'validators' Array must only contain functions."
+            throw "'validators' Array must only contain Functions."
 
     if name
         Object.defineProperty(def, 'name', {
@@ -198,3 +248,15 @@ normalizeDefinition = (aDef) ->
     })
 
     return Object.freeze(def)
+
+
+# Private:
+throwInvparam = (aError) ->
+    aError.code = INVPARAM
+    throw aError
+
+
+# Private:
+throwInvpropdef = (aError) ->
+    aError.code = INVPROPDEF
+    throw aError
