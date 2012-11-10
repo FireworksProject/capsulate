@@ -12,9 +12,9 @@ _.mixin({
         return no
 })
 
-exports.proto = proto = Object.create(null)
+exports.proto = gProto = Object.create(null)
 
-proto.create = ->
+gProto.create = ->
     defs = @definitions
     rv = Object.keys(defs).reduce((rv, key) ->
         rv[key] = if _.hasProperty(defs[key], 'defaultValue')
@@ -26,7 +26,7 @@ proto.create = ->
     , Object.create(null))
     return rv
 
-proto.clean = (aObject) ->
+gProto.clean = (aObject) ->
     defs = @definitions
     rv = Object.keys(defs).reduce((rv, key) ->
         rv[key] = aObject[key]
@@ -34,7 +34,7 @@ proto.clean = (aObject) ->
     , Object.create(null))
     return rv
 
-proto.coerce = (aObject) ->
+gProto.coerce = (aObject) ->
     defs = @definitions
     rv = Object.keys(aObject).reduce((rv, key) ->
         value = aObject[key]
@@ -45,7 +45,7 @@ proto.coerce = (aObject) ->
     , Object.create(null))
     return rv
 
-proto.validate = (aObject) ->
+gProto.validate = (aObject) ->
     errors = Object.create(null)
     defs = @definitions
 
@@ -67,47 +67,52 @@ proto.validate = (aObject) ->
     if Object.keys(errors).length then return errors
     return null
 
-proto.extend = (aProto) ->
-    return
+gProto.extend = (aDefinitions) ->
+    if not _.isObject(aDefinitions) or Array.isArray(aDefinitions)
+        msg = "Definitions passed to .extend(aDefinitions) must be an Object."
+        throw new Error(msg)
+
+    return createModel(@, aDefinitions)
 
 
 exports.create = (aDefinitions) ->
-    definitions = Object.create(null)
+    if not _.isObject(aDefinitions) or Array.isArray(aDefinitions)
+        msg = "Definitions passed to create(aDefinitions) must be an Object."
+        throw new Error(msg)
 
-    for own key, val of aDefinitions
-        try
-            def = normalizeDefinition(val)
-        catch message
-            throw new Error("Definition error '#{key}': #{message}")
+    return createModel(gProto, aDefinitions)
 
-        Object.defineProperty(definitions, key, {
-            enumerable: yes
-            value: def
+
+createModel = do ->
+
+    # Extend an object using Object.defineProperty().
+    extend = (target, source) ->
+        for own key, val of source
+            if key isnt 'definitions'
+                Object.defineProperty(target, key, {
+                    enumerable: yes
+                    value: val
+                })
+        return target
+
+    create = (aParent, aChild) ->
+        model = Object.create(null)
+        # Only extend the methods of the parent object. The child object is
+        # just a definition dictionary.
+        model = extend(model, aParent)
+
+        # Create and extend the definitions with the .definitions property of
+        # the parent, the the child Object, which is the new definition
+        # dictionary.
+        definitions = extendDefinitions(aParent.definitions, aChild)
+        Object.defineProperty(model, 'definitions', {
+            value: Object.freeze(definitions)
         })
 
-    self = Object.create(null, {
-        definitions:
-            value: Object.freeze(definitions)
-        create:
-            enumerable: yes
-            value: proto.create
-        clean:
-            enumerable: yes
-            value: proto.clean
-        coerce:
-            enumerable: yes
-            value: proto.coerce
-        validate:
-            enumerable: yes
-            value: proto.validate
-    })
+        # Freeze it to prevent accidental tampering.
+        return Object.freeze(model)
 
-    return Object.freeze(self)
-
-
-create = () ->
-    model = Object.create(null)
-    return Object.freeze(model)
+    return create
 
 
 extendDefinitions = do ->
@@ -124,15 +129,15 @@ extendDefinitions = do ->
         })
         return definitions
 
-    extend = (aTarget, aSource) ->
+    extend = (aParent, aChild) ->
         defs = Object.create(null)
 
-        defs = Object.keys(aSource).reduce((defs, key) ->
-            return define(defs, key, aSource[key])
+        defs = Object.keys(aParent).reduce((defs, key) ->
+            return define(defs, key, aParent[key])
         , Object.create(null))
 
-        defs = Object.keys(aTarget).reduce((defs, key) ->
-            return define(defs, key, aTarget[key])
+        defs = Object.keys(aChild).reduce((defs, key) ->
+            return define(defs, key, aChild[key])
         , defs)
 
         return defs
