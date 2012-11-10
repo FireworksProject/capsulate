@@ -73,7 +73,7 @@ var john = Buyer.create({tags: [safe]});
 
 var jane = Buyer.clean(formData);
 
-jane = Buyer.coerce(jane);
+jane = Buyer.cast(jane);
 
 var errors = Buyer.validate(jane);
 
