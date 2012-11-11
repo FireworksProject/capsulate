@@ -19,17 +19,44 @@ _.mixin({
 # Model is the prototype for all Object models.
 exports.Model = Model = Object.create(null)
 
-Model.create = ->
-    defs = @definitions
-    rv = Object.keys(defs).reduce((rv, key) ->
-        rv[key] = if _.hasProperty(defs[key], 'defaultValue')
-            dval = defs[key].defaultValue
-            if _.isFunction(dval) then dval()
-            else dval
-        else null
+# Public: Create a new Object using the default property values defined by the
+# Model.
+#
+# aSource - The source object to attach properties to
+#           (default: Object.create(null)).
+#
+# Properties will be defined on the source object according to the defaultValue
+# given in the Model definition for each property.
+#
+# Returns a new Object with own, enumerable properties defined from aSource and
+# the default property values of the Model.
+Model.create = do ->
+
+    define = (obj, key, val) ->
+        # Use Object.defineProperty() for more control.
+        Object.defineProperty(obj, key, {
+            enumerable: yes
+            writable: yes
+            value: val
+        })
+        return obj
+
+    create = (aSource) ->
+        source = if aSource and _.isObject(aSource)
+            Object.keys(aSource).reduce((source, key) ->
+                return define(source, key, aSource[key])
+            , Object.create(null))
+        else Object.create(null)
+
+        defs = @definitions
+        rv = Object.keys(defs).reduce((rv, key) ->
+            if not _.hasProperty(rv, key)
+                define(rv, key, defs[key].defaultValue(source[key]))
+            return rv
+        , source)
         return rv
-    , Object.create(null))
-    return rv
+
+    return create
 
 Model.clean = (aObject) ->
     defs = @definitions
@@ -207,15 +234,28 @@ normalizeDefinition = (aDef) ->
     if coerce and not _.isFunction(coerce)
         throw "'coerce' definition must be a Function."
 
+    # .defaultValue must be coerced into a Function.
     if _.hasProperty(aDef, 'defaultValue')
-        if _.isFunction(aDef.defaultValue)
-            defaultValue = aDef.defaultValue
+        df = aDef.defaultValue
+
+        # Already a function.
+        if _.isFunction(df)
+            defaultValue = df
+
+        # Return deep copies of mutable Objects and Arrays to prevent
+        # accidental tampering.
+        else if _.isObject(aDef.defaultValue)
+            df = JSON.parse(JSON.stringify(df))
+            defaultValue = -> return JSON.parse(JSON.stringify(df))
+
+        # Simply return primitives, detached from the object to prevent
+        # accidental mutation.
         else
-            defaultValue = -> return aDef.defaultValue
+            defaultValue = -> return df
+
+    # Default is to return null
     else
         defaultValue = -> return null
-
-    if _.isObject(defaultValue) then Object.freeze(defaultValue)
 
     validators = aDef.validators or []
     if validators and not Array.isArray(validators)
