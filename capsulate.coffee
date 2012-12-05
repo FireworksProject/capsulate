@@ -19,14 +19,16 @@ _.mixin({
 # Model is the prototype for all Object models.
 exports.Model = Model = Object.create(null)
 
+
 # Public: Create a new Object using the default property values defined by the
 # Model.
 #
-# aSource - The source object to attach properties to
+# aSource - The source Object to get properties from
 #           (default: Object.create(null)).
 #
-# Properties will be defined on the source object according to the defaultValue
-# given in the Model definition for each property.
+# Properties will be defined on the new Object according to the defaultValue
+# given in the Model definition for each property if the property is not an own
+# property of aSource.
 #
 # Returns a new Object with own, enumerable properties defined from aSource and
 # the default property values of the Model.
@@ -58,6 +60,15 @@ Model.create = do ->
 
     return create
 
+
+# Public: Create an Object which only contains the properties which are defined
+# by this Model.
+#
+# aObject - The source Object.
+#
+# Returns a new Object with own, enumerable properties defined from aSource.
+# The only Properties which will be defined on the new Object are those that
+# are defined by this Model *and* exist on the source object (aObject).
 Model.clean = (aObject) ->
     if Object(aObject) isnt aObject
         msg = "Model::clean(aObject) expects an Object as the single parameter."
@@ -65,12 +76,22 @@ Model.clean = (aObject) ->
 
     defs = @definitions
     rv = Object.keys(defs).reduce((rv, key) ->
-        if Object::hasOwnProperty.call(aObject, key)
+        if _.hasProperty(aObject, key)
             rv[key] = aObject[key]
         return rv
     , Object.create(null))
     return rv
 
+
+# Public: Coerce the properties of an Object using the coerce functions defined
+# by this Model.
+#
+# aObject - The source Object.
+#
+# Returns a new Object with own, enumerable properties defined from aSource
+# after each property of aSource has been passed through the corresponding
+# coerce function defined by this Model. If no coerce function is defined on
+# this Model for the property, then it is simply defined as is.
 Model.coerce = (aObject) ->
     if Object(aObject) isnt aObject
         msg = "Model::coerce(aObject) expects an Object as the single parameter."
@@ -86,6 +107,15 @@ Model.coerce = (aObject) ->
     , Object.create(null))
     return rv
 
+
+# Public: Validate an Object by running the validation functions defined for
+# each property on this Model.
+#
+# aObject - The Object to validate.
+#
+# Returns an Object whoes own properties are the keys of the properties on the
+# given aObject which did not pass validation. If all the properties on aObject
+# pass validation then returns null.
 Model.validate = (aObject) ->
     errors = Object.create(null)
     defs = @definitions
