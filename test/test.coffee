@@ -31,6 +31,9 @@ describe '::create()', ->
         @equal(typeof model.coerce, 'function', 'model.coerce')
         @assert(('coerce' in keys), 'coerce() is own, enumerable property')
 
+        @equal(typeof model.merge, 'function', 'model.merge')
+        @assert(('merge' in keys), 'merge() is own, enumerable property')
+
         @equal(typeof model.validate, 'function', 'model.validate')
         @assert(('validate' in keys), 'validate() is own, enumerable property')
 
@@ -81,6 +84,20 @@ describe '::create()', ->
         catch err
             @equal(err.code, 'INVPROPDEF', 'Error.code')
             @equal(err.message, "Definition error for property 'foo': 'coerce' definition must be a Function.", 'Error.message')
+
+        return done()
+
+
+    it 'should throw an Error if a merge definition is made but is not a Function', T (done) ->
+        @expectCount(2)
+        try
+            CAP.create({
+                foo:
+                    merge: 'string'
+            })
+        catch err
+            @equal(err.code, 'INVPROPDEF', 'Error.code')
+            @equal(err.message, "Definition error for property 'foo': 'merge' definition must be a Function.", 'Error.message')
 
         return done()
 
@@ -150,6 +167,9 @@ describe 'Model.extend()', ->
         @equal(typeof Person.coerce, 'function', 'Person.coerce')
         @assert(('coerce' in keys), 'coerce() is own, enumerable property')
 
+        @equal(typeof Person.merge, 'function', 'Person.merge')
+        @assert(('merge' in keys), 'merge() is own, enumerable property')
+
         @equal(typeof Person.validate, 'function', 'Person.validate')
         @assert(('validate' in keys), 'validate() is own, enumerable property')
 
@@ -211,6 +231,20 @@ describe 'Model.extend()', ->
         return done()
 
 
+    it 'should throw an Error if a merge definition is made but is not a Function', T (done) ->
+        @expectCount(2)
+        try
+            BaseModel.extend({
+                foo:
+                    merge: 'string'
+            })
+        catch err
+            @equal(err.code, 'INVPROPDEF', 'Error.code')
+            @equal(err.message, "Definition error for property 'foo': 'merge' definition must be a Function.", 'Error.message')
+
+        return done()
+
+
     it 'should throw an Error if a validators definition is made but is not an Array of Functions', T (done) ->
         @expectCount(4)
 
@@ -247,7 +281,15 @@ describe 'Model.create()', ->
             firstName: {}
             lastName: {}
             address:
-                defaultValue: {city: null, state: null}
+                coerce: (val) ->
+                    if val and typeof val is 'object'
+                        city = val.city or null
+                        state = val.state or null
+                        return {city: city, state: state}
+                    return {city: null, state: null}
+
+                defaultValue: (src) ->
+                    return @coerce(src)
             tags:
                 defaultValue: ['tennis', 'reading']
             twitterHandle:
@@ -350,7 +392,7 @@ describe 'Model.create()', ->
                 defaultValue: ''
             address:
                 defaultValue: (source) ->
-                    rv = {}
+                    rv = Object.create(null)
 
                     rv.city = if source.city and typeof source.city is 'string'
                         source.city
@@ -465,11 +507,11 @@ describe 'Model.coerce()', ->
                 name: 'Address'
                 defaultValue: {city: null, state: null}
                 coerce: (val) ->
+                    rv = @defaultValue()
                     if val and typeof val is 'object'
-                        city = val.city or null
-                        state = val.state or null
-                        return {city: city, state: state}
-                    return {city: null, state: null}
+                        rv.city = val.city or null
+                        rv.state = val.state or null
+                    return rv
         })
 
         source =
@@ -512,6 +554,56 @@ describe 'Model.coerce()', ->
         catch e2
             @equal(e2.code, 'INVPARAM', 'Error.code')
             @equal(e2.message, errMessage, 'Error.message')
+        return done()
+
+    return
+
+
+describe 'Model.merge()', ->
+
+    it 'should return a new object by merging the passed objects', T (done) ->
+
+        M = CAP.create({
+            firstName:
+                name: 'First Name'
+            lastName:
+                name: 'Last Name'
+            address:
+                name: 'Address'
+
+                coerce: (val) ->
+                    if val and typeof val is 'object'
+                        city = val.city or null
+                        state = val.state or null
+                        return {city: city, state: state}
+                    return {city: null, state: null}
+
+                merge: (existing, source) ->
+                    if Object(existing) isnt existing
+                        existing = Object.create(null)
+                    source = @coerce(source)
+                    existing.city = source.city or existing.city or null
+                    existing.state = source.state or existing.state or null
+                    return existing
+        })
+
+        existing =
+            firstName: 'Foo'
+            address: {street: '10 Main', city: 'Cambridge'}
+
+        source =
+            firstName: 'John'
+            lastName: 'Doe'
+            address: {city: 'Somerville', state: 'MA'}
+
+        m = M.merge(existing, source)
+
+        @strictEqual(Object.keys(m).length, 3, 'Object.keys()')
+        @equal(m.firstName, 'John', '.firstName')
+        @equal(m.lastName, 'Doe', '.lastName')
+        @equal(m.address.street, '10 Main', '.address.street')
+        @equal(m.address.city, 'Somerville', '.address.city')
+        @equal(m.address.state, 'MA', '.address.state')
         return done()
 
     return

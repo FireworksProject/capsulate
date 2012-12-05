@@ -32,33 +32,20 @@ exports.Model = Model = Object.create(null)
 #
 # Returns a new Object with own, enumerable properties defined from aSource and
 # the default property values of the Model.
-Model.create = do ->
+Model.create = (aSource) ->
+    source = if aSource and _.isObject(aSource)
+        Object.keys(aSource).reduce((source, key) ->
+            return defineProp(source, key, aSource[key])
+        , Object.create(null))
+    else Object.create(null)
 
-    define = (obj, key, val) ->
-        # Use Object.defineProperty() for more control.
-        Object.defineProperty(obj, key, {
-            enumerable: yes
-            writable: yes
-            value: val
-        })
-        return obj
-
-    create = (aSource) ->
-        source = if aSource and _.isObject(aSource)
-            Object.keys(aSource).reduce((source, key) ->
-                return define(source, key, aSource[key])
-            , Object.create(null))
-        else Object.create(null)
-
-        defs = @definitions
-        rv = Object.keys(defs).reduce((rv, key) ->
-            if not _.hasProperty(rv, key)
-                define(rv, key, defs[key].defaultValue(source[key]))
-            return rv
-        , source)
+    defs = @definitions
+    rv = Object.keys(defs).reduce((rv, key) ->
+        if not _.hasProperty(rv, key)
+            defineProp(rv, key, defs[key].defaultValue(source[key]))
         return rv
-
-    return create
+    , source)
+    return rv
 
 
 # Public: Create an Object which only contains the properties which are defined
@@ -77,7 +64,7 @@ Model.clean = (aObject) ->
     defs = @definitions
     rv = Object.keys(defs).reduce((rv, key) ->
         if _.hasProperty(aObject, key)
-            rv[key] = aObject[key]
+            defineProp(rv, key, aObject[key])
         return rv
     , Object.create(null))
     return rv
@@ -101,8 +88,8 @@ Model.coerce = (aObject) ->
     rv = Object.keys(aObject).reduce((rv, key) ->
         value = aObject[key]
         if Object::hasOwnProperty.call(defs, key) and coerce = defs[key].coerce
-            rv[key] = coerce(value)
-        else rv[key] = value
+            defineProp(rv, key, coerce(value))
+        else defineProp(rv, key, value)
         return rv
     , Object.create(null))
     return rv
@@ -139,6 +126,39 @@ Model.validate = (aObject) ->
     if Object.keys(errors).length then return errors
     return null
 
+
+# Public: Merge two objects together using the merge rules defined on this
+# Model.
+#
+# aTarget - The Object that receive properties from the aSource.
+# aSource - The Object that will provide properties to aTarget.
+#
+# Returns a new object made up of all the properties of aTarget and aSource.
+# Any properties of aTarget which also exist on aSource will be overwritten by
+# those of aSource.  If this Model definition includes merge functions for any
+# properties of aSource, they will be executed and the resulting values will be
+# used to define those properties on aTarget.
+Model.merge = (aTarget, aSource) ->
+    defs = @definitions
+
+    # First, copy over all properties to a new object.
+    rv = Object.keys(aTarget).reduce((rv, key) ->
+        return defineProp(rv, key, aTarget[key])
+    , Object.create(null))
+
+    # Then merge in the properties from aSource
+    rv = Object.keys(aSource).reduce((rv, key) ->
+        val = aSource[key]
+        if Object::hasOwnProperty.call(defs, key) and merge = defs[key].merge
+            defineProp(rv, key, merge(rv[key], val))
+        else
+            defineProp(rv, key, val)
+
+        return rv
+    , rv)
+    return rv
+
+
 # Public: Create a new Model Object by extending this object.
 #
 # aDefs - The dictionary Object of property definitions whose own enumerable
@@ -166,21 +186,30 @@ Model.extend = (aDefs) ->
 #                 validation error messages.
 # .defaultValue - The default value to use for this property when creating a
 #                 new instance of the modeled Object.
-# .validators   - An Array of validation functions that will each be called
+# .validators   - An Array of validation Functions that will each be called
 #                 during the validation process.
-# .coerce       - A type casting function that can modify the value of a
+# .coerce       - A type casting Function that can modify the value of a
 #                 property on the modeled object.
+# .merge        - A Function to provide special merge logic used when this
+#                 property is merged with another.
 #
-# The signature for the validation functions is:
+# The signature for the validation Functions is:
 #
 # `function validator(value, key, name) { ... }`
 #
 # The 'value' is the value of the property, the key is the property key, and
 # the name is the name given to the property in the property definition.
 #
-# The signature for the coerce function is:
+# The signature for the coerce Function is:
 #
 # `function typecast(value) { return anotherValue; }`
+#
+# The signature for the merge Function is:
+#
+# `function merge(existing, source) { return mergedValue; }`
+#
+# The 'existing' is the value of the property on the target Object, while
+# 'source' is the value on the source Object.
 #
 # Returns a new Model Object which has been 'frozen' to prevent accidental
 # tampering.
@@ -274,6 +303,10 @@ normalizeDefinition = (aDef) ->
     if coerce and not _.isFunction(coerce)
         throw "'coerce' definition must be a Function."
 
+    merge = aDef.merge
+    if merge and not _.isFunction(merge)
+        throw "'merge' definition must be a Function."
+
     # .defaultValue must be coerced into a Function.
     if _.hasProperty(aDef, 'defaultValue')
         df = aDef.defaultValue
@@ -314,7 +347,13 @@ normalizeDefinition = (aDef) ->
     if coerce
         Object.defineProperty(def, 'coerce', {
             enumerable: yes
-            value: coerce
+            value: (val) -> coerce.call(def, val)
+        })
+
+    if merge
+        Object.defineProperty(def, 'merge', {
+            enumerable: yes
+            value: (target, source) -> merge.call(def, target, source)
         })
 
     Object.defineProperty(def, 'defaultValue', {
@@ -329,6 +368,15 @@ normalizeDefinition = (aDef) ->
 
     return Object.freeze(def)
 
+
+defineProp = (obj, key, val) ->
+    # Use Object.defineProperty() for more control.
+    Object.defineProperty(obj, key, {
+        enumerable: yes
+        writable: yes
+        value: val
+    })
+    return obj
 
 # Private:
 throwInvparam = (aError) ->
