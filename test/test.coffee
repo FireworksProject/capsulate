@@ -384,3 +384,183 @@ describe 'Model.create()', ->
 
 
     return
+
+
+describe 'Model.clean()', ->
+
+    it 'should create a new object with only the defined properties.', T (done) ->
+
+        M = CAP.create({
+            firstName:
+                name: 'First Name'
+            lastName:
+                name: 'Last Name'
+            address:
+                name: 'Address'
+                defaultValue: {city: null, state: null}
+            tags:
+                defaultValue: ['tennis', 'reading']
+            age:
+                defaultValue: 0
+        })
+
+        source =
+            firstName: 'Foo'
+            tags: ['blacksmithing']
+            gender: 'male'
+
+        m = M.clean(source)
+
+        @notStrictEqual(m, source, 'a new object is created')
+
+        @strictEqual(m.firstName, 'Foo', '.firstName')
+        @equal(Object::hasOwnProperty.call(m, 'lastName'), false, '.lastName')
+        @equal(Object::hasOwnProperty.call(m, 'address'), false, '.address')
+        @strictEqual(m.tags.length, 1, 'm.tags.length')
+        @strictEqual(m.tags[0], 'blacksmithing', 'm.tags[0]')
+        @equal(Object::hasOwnProperty.call(m, 'age'), false, '.age')
+        @equal(Object::hasOwnProperty.call(m, 'gender'), false, '.gender')
+        return done()
+
+
+    it 'expects an object or function to be passed as the single parameter', T (done) ->
+        @expectCount(4)
+        errMessage = "Model::clean(aObject) expects an Object as the single parameter."
+
+        M = CAP.create({})
+
+        # Functions are OK
+        f = ->
+        M.clean(f)
+
+        # Arrays are OK
+        M.clean([])
+        
+        try
+            M.clean()
+        catch e1
+            @equal(e1.code, 'INVPARAM', 'Error.code')
+            @equal(e1.message, errMessage, 'Error.message')
+        
+        try
+            M.clean(null)
+        catch e2
+            @equal(e2.code, 'INVPARAM', 'Error.code')
+            @equal(e2.message, errMessage, 'Error.message')
+        return done()
+
+    return
+
+
+describe 'Model.coerce()', ->
+
+    it 'should create a new object with coerceable values coerced.', T (done) ->
+
+        M = CAP.create({
+            firstName:
+                name: 'First Name'
+            lastName:
+                name: 'Last Name'
+            address:
+                name: 'Address'
+                defaultValue: {city: null, state: null}
+                coerce: (val) ->
+                    if val and typeof val is 'object'
+                        city = val.city or null
+                        state = val.state or null
+                        return {city: city, state: state}
+                    return {city: null, state: null}
+        })
+
+        source =
+            firstName: 'Foo'
+            age: 32
+            address: {city: 'Cambridge'}
+
+        m = M.coerce(source)
+
+        @notStrictEqual(m, source, 'a new object is created')
+        @strictEqual(m.firstName, 'Foo', '.firstName')
+        @equal(Object::hasOwnProperty.call(m, 'lastName'), false, '.lastName')
+        @strictEqual(m.age, 32, '.age')
+        @strictEqual(m.address.city, 'Cambridge', '.address.city')
+        @strictEqual(m.address.state, null, '.address.state')
+        return done()
+
+
+    it 'expects an object or function to be passed as the single parameter', T (done) ->
+        @expectCount(4)
+        errMessage = "Model::coerce(aObject) expects an Object as the single parameter."
+
+        M = CAP.create({})
+
+        # Functions are OK
+        f = ->
+        M.coerce(f)
+
+        # Arrays are OK
+        M.coerce([])
+        
+        try
+            M.coerce()
+        catch e1
+            @equal(e1.code, 'INVPARAM', 'Error.code')
+            @equal(e1.message, errMessage, 'Error.message')
+        
+        try
+            M.coerce(null)
+        catch e2
+            @equal(e2.code, 'INVPARAM', 'Error.code')
+            @equal(e2.message, errMessage, 'Error.message')
+        return done()
+
+    return
+
+
+describe 'Model.validate()', ->
+
+    it 'should return an errors object if there are any validation errors', T (done) ->
+        validateExists = (val, key, name) ->
+            if typeof val is 'undefined' or val is null
+                return "The '#{name}' property is required."
+            return
+
+        validateString = (val, key, name) ->
+            if not val or typeof val isnt 'string'
+                return "The '#{name}' property must be a String."
+            return
+
+        validateObject = (val, key, name) ->
+            if Object(val) isnt val
+                return "The '#{name}' property must be an Object."
+            return
+
+        M = CAP.create({
+            firstName:
+                name: 'First Name'
+                validators: [validateExists, validateString]
+            lastName:
+                name: 'Last Name'
+                validators: [validateExists, validateString]
+            address:
+                name: 'Address'
+                validators: [validateExists, validateObject]
+        })
+
+        source =
+            firstName: 32
+            age: 32
+            address: 'Cambridge'
+
+        errors = M.validate(source)
+
+        @equal(errors.firstName[0], "The 'First Name' property must be a String.", '.firstName[0]')
+
+        @equal(errors.lastName[0], "The 'Last Name' property is required.", '.lastName[0]')
+        @equal(errors.lastName[1], "The 'Last Name' property must be a String.", '.lastName[1]')
+
+        @equal(errors.address[0], "The 'Address' property must be an Object.", '.address[0]')
+
+        return done()
+
+    return

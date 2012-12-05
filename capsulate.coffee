@@ -59,19 +59,28 @@ Model.create = do ->
     return create
 
 Model.clean = (aObject) ->
+    if Object(aObject) isnt aObject
+        msg = "Model::clean(aObject) expects an Object as the single parameter."
+        throwInvparam(new Error(msg))
+
     defs = @definitions
     rv = Object.keys(defs).reduce((rv, key) ->
-        rv[key] = aObject[key]
+        if Object::hasOwnProperty.call(aObject, key)
+            rv[key] = aObject[key]
         return rv
     , Object.create(null))
     return rv
 
 Model.coerce = (aObject) ->
+    if Object(aObject) isnt aObject
+        msg = "Model::coerce(aObject) expects an Object as the single parameter."
+        throwInvparam(new Error(msg))
+
     defs = @definitions
     rv = Object.keys(aObject).reduce((rv, key) ->
         value = aObject[key]
-        coerce = defs[key].coerce
-        if coerce then rv[key] = coerce(value)
+        if Object::hasOwnProperty.call(defs, key) and coerce = defs[key].coerce
+            rv[key] = coerce(value)
         else rv[key] = value
         return rv
     , Object.create(null))
@@ -86,9 +95,10 @@ Model.validate = (aObject) ->
         errors[key].push(err)
         return
 
-    Object.keys(aObject).forEach (key) ->
+    Object.keys(defs).forEach (key) ->
         validators = defs[key].validators
         if not validators.length then return
+
         stringName = defs[key].name or key
         value = aObject[key]
         for validate in validators
