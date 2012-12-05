@@ -3,7 +3,7 @@ ROOT = File.dirname __FILE__
 task :default => :build
 
 desc "Run automated tests."
-task :test => ['node_modules', :build] do
+task :test => ['node_modules/.bin/coffee', :build] do
     sh "bin/runtests"
 end
 
@@ -21,8 +21,9 @@ task :build => build_deps do
 end
 
 desc "Install development dependencies."
-file 'node_modules' => 'package.json' do
-    sh "npm install --dev"
+file 'node_modules/.bin/coffee' => 'package.json' do
+    # sh "npm install --dev" Results in infinte loop
+    sh "sudo npm install"
 end
 
 directory 'dist'
@@ -45,10 +46,8 @@ file 'dist/MIT-LICENSE' => ['MIT-LICENSE', 'dist'] do |task|
     FileUtils.cp task.prerequisites.first, task.name
 end
 
-rule '.js' => [
-    proc { |tn| tn.sub(/\.js$/, '.coffee').sub(/^dist\//, '') }
-] do |t|
-    brew_javascript(t.source, t.name)
+file 'dist/capsulate.js' => ['capsulate.coffee', 'dist'] do |task|
+    brew_javascript(task.prerequisites.first, task.name)
 end
 
 desc "Start over with a clean slate."

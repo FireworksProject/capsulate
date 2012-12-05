@@ -5,11 +5,11 @@
     "author": "Kris Walker <kris@kixx.name> (http://www.kixx.name/)",
     "main": "capsule",
     "dependencies": {
-        "underscore": "1.4.2"
+        "underscore": "1.4.3"
     },
     "devDependencies": {
         "coffee-script": "1.4.0",
-        "mocha": "1.6.0",
+        "mocha": "1.7.3",
         "test-tools": "0.1.0"
     }
 }
