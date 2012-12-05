@@ -28,31 +28,25 @@ Create prototypes to use.
 var Person = CAP.extend({
 	firstName: {
 		name: 'first name',
-		type: String,
+		coerce: String,
 		defaultValue: '',
-		tags: ['safe'],
 		validators: [string, required]
 	},
 	lastName: {
 		name: 'last name',
-		type: String,
+		coerce: String,
 		defaultValue: '',
-		tags: ['safe'],
 		validators: [string, required]
 	},
 	age: {
-		type: Number,
 		defaultValue: 0,
-		tags: ['safe'],
 	  validators: [number]
 	},
 	affilations: {
-		type: Array,
 		defaultValue: Array,
 		validators: [affiliations]
 	},
   address: {
-		type: Address, // Another capsule object
 		defaultValue: function () { return Object.create(null); },
     validators: [address]
 	}
@@ -60,8 +54,7 @@ var Person = CAP.extend({
 
 var Buyer = Person.extend({
 	purchases: {
-		type: Array,
-		defaultValue: Array,
+		defaultValue: [],
 		validators: [purchases]
 	}
 });
@@ -73,7 +66,7 @@ var john = Buyer.create({tags: [safe]});
 
 var jane = Buyer.clean(formData);
 
-jane = Buyer.cast(jane);
+jane = Buyer.coerce(jane);
 
 var errors = Buyer.validate(jane);
 
